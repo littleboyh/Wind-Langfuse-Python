@@ -1,6 +1,7 @@
+import re
 import socket
 from types import TracebackType
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Mapping, Optional, Type
 
 from langfuse import Langfuse
 from opentelemetry.sdk.resources import Resource
@@ -11,6 +12,13 @@ from wind_langfuse._version import __version__
 
 WIND_SDK_LANGUAGE = "python"
 WIND_SDK_NAME = "wind-langfuse-sdk"
+TRACEPARENT_HEADER = "traceparent"
+TRACEPARENT_PATTERN = re.compile(
+    r"^(?P<version>[0-9a-f]{2})-"
+    r"(?P<trace_id>[0-9a-f]{32})-"
+    r"(?P<parent_span_id>[0-9a-f]{16})-"
+    r"(?P<trace_flags>[0-9a-f]{2})$"
+)
 
 
 class WindLangfuse:
@@ -85,6 +93,22 @@ class WindLangfuse:
     def create_event(self, **kwargs: Any) -> "WindObservation":
         kwargs["name"] = self._format_observation_name(kwargs["name"])
         return self._wrap_observation(self._client.create_event(**kwargs))
+
+    def extract_trace_context(
+        self, headers: Mapping[str, str]
+    ) -> Optional[Dict[str, str]]:
+        traceparent = _get_header(headers, TRACEPARENT_HEADER)
+        if traceparent is None:
+            return None
+
+        match = TRACEPARENT_PATTERN.fullmatch(traceparent.strip())
+        if match is None:
+            return None
+
+        return {
+            "trace_id": match.group("trace_id"),
+            "parent_span_id": match.group("parent_span_id"),
+        }
 
     def update_current_trace(self, **kwargs: Any) -> Any:
         kwargs.pop("name", None)
@@ -254,3 +278,16 @@ def _get_host_ip() -> str:
         return socket.gethostbyname(socket.gethostname())
     except OSError:
         return "127.0.0.1"
+
+
+def _get_header(headers: Mapping[str, str], name: str) -> Optional[str]:
+    value = headers.get(name)
+    if value is not None:
+        return value
+
+    lower_name = name.lower()
+    for header_name, header_value in headers.items():
+        if header_name.lower() == lower_name:
+            return header_value
+
+    return None
