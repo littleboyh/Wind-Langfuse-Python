@@ -1,7 +1,7 @@
 import re
 import socket
 from types import TracebackType
-from typing import Any, Dict, Mapping, Optional, Type
+from typing import Any, Dict, Mapping, MutableMapping, Optional, Type
 
 from langfuse import Langfuse
 from opentelemetry.sdk.resources import Resource
@@ -109,6 +109,22 @@ class WindLangfuse:
             "trace_id": match.group("trace_id"),
             "parent_span_id": match.group("parent_span_id"),
         }
+
+    def inject_trace_context(
+        self, headers: Optional[MutableMapping[str, str]] = None
+    ) -> Dict[str, str]:
+        output_headers = dict(headers or {})
+        trace_id = self._client.get_current_trace_id()
+        parent_span_id = self._client.get_current_observation_id()
+
+        if trace_id is None or parent_span_id is None:
+            return output_headers
+
+        output_headers[
+            TRACEPARENT_HEADER
+        ] = f"00-{trace_id}-{parent_span_id}-01"
+
+        return output_headers
 
     def update_current_trace(self, **kwargs: Any) -> Any:
         kwargs.pop("name", None)
