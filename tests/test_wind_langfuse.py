@@ -54,6 +54,8 @@ class FakeLangfuse:
         self.init_kwargs = kwargs
         self.update_current_trace_kwargs: Optional[Dict[str, Any]] = None
         self.last_observation: Optional[FakeObservation] = None
+        self.current_trace_id: Optional[str] = None
+        self.current_observation_id: Optional[str] = None
 
     def start_span(self, **kwargs: Any) -> FakeObservation:
         self.last_observation = FakeObservation(kwargs["name"])
@@ -65,6 +67,12 @@ class FakeLangfuse:
 
     def update_current_trace(self, **kwargs: Any) -> None:
         self.update_current_trace_kwargs = kwargs
+
+    def get_current_trace_id(self) -> Optional[str]:
+        return self.current_trace_id
+
+    def get_current_observation_id(self) -> Optional[str]:
+        return self.current_observation_id
 
 
 def create_test_client() -> WindLangfuse:
@@ -261,3 +269,58 @@ def test_extract_trace_context_returns_none_when_traceparent_invalid(
     client = create_test_client()
 
     assert client.extract_trace_context({"traceparent": "invalid"}) is None
+
+
+def test_inject_trace_context_writes_traceparent_from_current_context(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+    native_client = cast(FakeLangfuse, client.native_client)
+    native_client.current_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    native_client.current_observation_id = "00f067aa0ba902b7"
+
+    headers = client.inject_trace_context()
+
+    assert headers == {
+        "traceparent": (
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-"
+            "00f067aa0ba902b7-01"
+        )
+    }
+
+
+def test_inject_trace_context_preserves_headers_and_overwrites_traceparent(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+    native_client = cast(FakeLangfuse, client.native_client)
+    native_client.current_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    native_client.current_observation_id = "00f067aa0ba902b7"
+
+    headers = client.inject_trace_context(
+        {
+            "content-type": "application/json",
+            "traceparent": "00-00000000000000000000000000000000-0000000000000000-00",
+        }
+    )
+
+    assert headers == {
+        "content-type": "application/json",
+        "traceparent": (
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-"
+            "00f067aa0ba902b7-01"
+        ),
+    }
+
+
+def test_inject_trace_context_returns_headers_when_current_context_missing(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+
+    headers = client.inject_trace_context({"content-type": "application/json"})
+
+    assert headers == {"content-type": "application/json"}
