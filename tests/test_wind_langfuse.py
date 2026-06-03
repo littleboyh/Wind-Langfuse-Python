@@ -67,6 +67,18 @@ class FakeLangfuse:
         self.update_current_trace_kwargs = kwargs
 
 
+def create_test_client() -> WindLangfuse:
+    return WindLangfuse(
+        product_name="risk",
+        app_name="quote-service",
+        app_class_id="app-1",
+        version="1.2.3",
+        environment="prod",
+        public_key="pk",
+        secret_key="sk",
+    )
+
+
 def test_wind_client_prefixes_observation_names_and_sets_attributes(
     monkeypatch: Any,
 ) -> None:
@@ -191,3 +203,61 @@ def test_wind_resource_attributes(monkeypatch: Any) -> None:
     assert "wind.sdk.version" in resource_attributes
     assert "resource.host.ip" in resource_attributes
     assert "resource.host.name" in resource_attributes
+
+
+def test_extract_trace_context_from_traceparent(monkeypatch: Any) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+
+    trace_context = client.extract_trace_context(
+        {
+            "traceparent": (
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-"
+                "00f067aa0ba902b7-01"
+            )
+        }
+    )
+
+    assert trace_context == {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "parent_span_id": "00f067aa0ba902b7",
+    }
+
+
+def test_extract_trace_context_uses_case_insensitive_header_name(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+
+    trace_context = client.extract_trace_context(
+        {
+            "TraceParent": (
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-"
+                "00f067aa0ba902b7-01"
+            )
+        }
+    )
+
+    assert trace_context == {
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "parent_span_id": "00f067aa0ba902b7",
+    }
+
+
+def test_extract_trace_context_returns_none_when_traceparent_missing(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+
+    assert client.extract_trace_context({"x-request-id": "req-1"}) is None
+
+
+def test_extract_trace_context_returns_none_when_traceparent_invalid(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr("wind_langfuse.client.Langfuse", FakeLangfuse)
+    client = create_test_client()
+
+    assert client.extract_trace_context({"traceparent": "invalid"}) is None
