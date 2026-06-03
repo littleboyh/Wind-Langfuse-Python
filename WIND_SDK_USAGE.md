@@ -151,6 +151,42 @@ with client.start_as_current_span(name="request") as span:
     )
 ```
 
+## Propagate Traceparent Headers
+
+The wrapper can extract and inject W3C `traceparent` headers. This helps connect
+upstream and downstream Wind services without manually passing `trace_id` and
+`parent_span_id`.
+
+Downstream service:
+
+```python
+trace_context = client.extract_trace_context(request.headers)
+
+with client.start_as_current_span(name="handle-request", trace_context=trace_context) as span:
+    span.update(input={"path": request.url.path})
+```
+
+If `traceparent` is missing or malformed, `extract_trace_context` returns
+`None`. Passing `None` to `trace_context` lets Langfuse create a normal new
+trace.
+
+Upstream service:
+
+```python
+with client.start_as_current_span(name="call-downstream"):
+    headers = client.inject_trace_context({"content-type": "application/json"})
+    response = requests.post("https://downstream.example.com/run", headers=headers)
+```
+
+The injected header uses this format:
+
+```text
+traceparent: 00-<trace_id>-<parent_span_id>-01
+```
+
+If there is no active span, `inject_trace_context` returns the provided headers
+unchanged.
+
 ## Wind Attributes
 
 Every observation gets these attributes:

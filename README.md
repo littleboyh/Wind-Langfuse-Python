@@ -41,6 +41,23 @@ The observation above is reported to Langfuse with the name:
 quote-service:llm-call
 ```
 
+## Traceparent Propagation
+
+Inject the current context into outbound request headers:
+
+```python
+headers = client.inject_trace_context({"content-type": "application/json"})
+```
+
+Extract an upstream context from inbound request headers:
+
+```python
+trace_context = client.extract_trace_context(request.headers)
+
+with client.start_as_current_span(name="handler", trace_context=trace_context):
+    ...
+```
+
 ## Wind Rules
 
 - The published package name is `wind-langfuse-sdk`; the import package is `wind_langfuse`.
