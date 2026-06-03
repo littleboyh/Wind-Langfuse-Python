@@ -2,11 +2,11 @@ import socket
 from types import TracebackType
 from typing import Any, Dict, Optional, Type
 
+from langfuse import Langfuse
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
-from langfuse import Langfuse
 from wind_langfuse._version import __version__
 
 WIND_SDK_LANGUAGE = "python"
@@ -254,4 +254,3 @@ def _get_host_ip() -> str:
         return socket.gethostbyname(socket.gethostname())
     except OSError:
         return "127.0.0.1"
-
